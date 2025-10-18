@@ -43,27 +43,29 @@ int odometry_loop()
          deltaHorizontal = raw_horizontal - previous_horizontal;
          deltaHeading = heading - previous_heading;
 
-        if (deltaHeading == 0)
+        if (fabs(deltaHeading) < 1e-6)
         {
              localX = deltaHorizontal;
              localY = deltaVertical;
         }
         else
         {
+            sin_multiplier = 2 * sin(deltaHeading / 2);
+            
             localX = ((2 * sin(deltaHeading / 2)) * ((deltaHorizontal / deltaHeading)));
             localY = ((2 * sin(deltaHeading / 2)) * ((deltaVertical / deltaHeading)));
         }
 
-        if (localX == 0 && localY == 0)
+        if (localX < 1e-6 && localY 1e-6)
         {
-            polarRadius = 0;
             polarAngle = 0;
         }
         else
         {
             polarAngle = atan2(localY, localX);
-             polarRadius = sqrt(pow(localX, 2) + powf(localY, 2));
         }
+        
+         polarRadius = sqrt(pow(localX, 2) + powf(localY, 2));        
          globalPolarAngle = polarAngle - previous_heading - (deltaHeading / 2);
 
          x += polarRadius * cos(globalPolarAngle);
@@ -85,4 +87,5 @@ void startOdometry() {
         odometry_enabled = true;
         task o(odometry_loop);
     }
+
 }
