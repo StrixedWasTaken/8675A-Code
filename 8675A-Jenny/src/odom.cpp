@@ -52,11 +52,11 @@ int odometry_loop()
         {
             sin_multiplier = 2 * sin(deltaHeading / 2);
             
-            localX = ((2 * sin(deltaHeading / 2)) * ((deltaHorizontal / deltaHeading)));
-            localY = ((2 * sin(deltaHeading / 2)) * ((deltaVertical / deltaHeading)));
+            localX =  sin * ((deltaHorizontal / deltaHeading) + horizontal_offset);
+            localY = sin * ((deltaVertical / deltaHeading) + vertical_offset);
         }
 
-        if (localX < 1e-6 && localY 1e-6)
+        if (fabs(localX) < 1e-6 && fabs(localY) 1e-6)
         {
             polarAngle = 0;
         }
@@ -89,3 +89,4 @@ void startOdometry() {
     }
 
 }
+
