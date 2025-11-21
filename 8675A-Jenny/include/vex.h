@@ -19,7 +19,6 @@
 #include "robot-config.h"
 #include <iostream>
 
-
 using namespace vex;
 using namespace std;
 

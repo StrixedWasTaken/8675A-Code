@@ -17,8 +17,9 @@ extern motor_group Right;
 
 extern inertial imu;
 
-extern motor leftIntake;
-extern motor rightIntake;
+extern motor frontIntake;
+extern motor middleIntake;
+extern motor topIntake;
 
 extern motor_group intake;
 
@@ -28,8 +29,7 @@ extern rotation horizontal_wheel;
 
 extern optical color_sensor;
 
-extern digital_out piston_sorter;
-extern digital_out unloader;
+extern digital_out dropdown;
 extern digital_out height_changer;
 extern digital_out ball_stopper;
 extern motor all_motors[8];

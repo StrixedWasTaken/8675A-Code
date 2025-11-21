@@ -23,9 +23,16 @@ extern double toRad(double input);
  extern double globalPolarAngle;       // heading calculation for arc-based movements
  extern double vertical_offset;        // how far vertical wheel is from the center
  extern double horizontal_offset;      // how far horizontal wheel is from the center
+ extern double sin_multiplier; // used to calculate local coordinates of odometry
+ extern double vertical_tracking_diameter; // vertical tracking diameter of wheel
+ extern double horizontal_tracking_diameter; // horizontal tracking diameter of wheel
+
  extern bool odometry_enabled; // enables/disables odometry tracking
 
 extern int odometry_loop();
 
 extern void startOdometry();
 
+extern double getInertialHeading();
+
+void setCoordinates(double startX, double startY, double startHeadingDeg);

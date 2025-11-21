@@ -1,15 +1,5 @@
 #include "odom.h"
-
-double to_inch(double input)
-{
-    return (input / 360) * (1.0 * (M_PI * 2.0));
-}
-
-// degrees to radians
-double toRad(double input)
-{
-    return input * (M_PI / 180);
-}
+#include "utils.h"
 
  double x;                  // global x calculated using carestian and polar coordinate systems
  double y;                  // global Y calculated using carestian and polar coordinate systems
@@ -27,21 +17,25 @@ double toRad(double input)
  double polarRadius;            // polar coordinate of the distance using carestian x and y coordinates
  double polarAngle;             // polar coordinate that uses carestian x and y coordinates to determine the heading of the robot
  double globalPolarAngle;       // heading calculation for arc-based movements
- double vertical_offset = 5.0;        // how far vertical wheel is from the center
- double horizontal_offset = -2.0;      // how far horizontal wheel is from the center
+ double vertical_offset = 0.0;        // how far vertical wheel is from the center
+ double horizontal_offset = 0.0;      // how far horizontal wheel is from the center
+ double sin_multiplier; // multiplier fpor calculating local coordinates
+ double vertical_tracking_diameter = 2.0;
+ double horizontal_tracking_diameter = 2.0;
 bool odometry_enabled = false; // enables/disables odometry tracking
 
 int odometry_loop()
 {
-
     while (true)
     {
-         raw_vertical = to_inch(vertical_wheel.position(deg));
-         raw_horizontal = to_inch(horizontal_wheel.position(deg));
-         heading = toRad(imu.heading(deg));
+         raw_vertical = vertical_wheel.position(deg) * vertical_tracking_diameter * M_PI / 360;
+         raw_horizontal = horizontal_wheel.position(deg) * horizontal_tracking_diameter * M_PI / 360;
+         heading = toRad(get_absolute_heading());
          deltaVertical = raw_vertical - previous_vertical;
          deltaHorizontal = raw_horizontal - previous_horizontal;
          deltaHeading = heading - previous_heading;
+
+        cout << "heading: " << get_absolute_heading() << endl;
 
         if (fabs(deltaHeading) < 1e-6)
         {
@@ -52,11 +46,11 @@ int odometry_loop()
         {
             sin_multiplier = 2 * sin(deltaHeading / 2);
             
-            localX =  sin * ((deltaHorizontal / deltaHeading) + horizontal_offset);
-            localY = sin * ((deltaVertical / deltaHeading) + vertical_offset);
+            localX =  sin_multiplier * ((deltaHorizontal / deltaHeading) + horizontal_offset);
+            localY = sin_multiplier * ((deltaVertical / deltaHeading) + vertical_offset);
         }
 
-        if (fabs(localX) < 1e-6 && fabs(localY) 1e-6)
+        if (fabs(localX) < 1e-6 && fabs(localY) < 1e-6)
         {
             polarAngle = 0;
         }
@@ -71,8 +65,8 @@ int odometry_loop()
          x += polarRadius * cos(globalPolarAngle);
          y += polarRadius * sin(globalPolarAngle);
 
-        Brain.Screen.printAt(10, 40, "X: %2f", x);
-        Brain.Screen.printAt(10, 50, "Y: %2f", y);
+        Brain.Screen.printAt(10, 100, "X: %2f", x);
+        Brain.Screen.printAt(10, 110, "Y: %2f", y);
 
         previous_vertical = raw_vertical;
         previous_horizontal = raw_horizontal;
@@ -82,6 +76,23 @@ int odometry_loop()
     return 0;
 }
 
+void setCoordinates(double startX, double startY, double startHeadingDeg) {
+    // Set odometry position
+    x = startX;
+    y = startY;
+
+    // Set robot heading
+    heading = startHeadingDeg;   // for odometry math
+    imu.setHeading(startHeadingDeg, degrees); // optional: sync with sensor
+
+    // Reset velocities or previous errors if your odometry uses them
+    previous_horizontal = startX;
+    previous_vertical = startY;
+    previous_heading = startHeadingDeg;
+
+    deltaHorizontal = 0;
+    deltaVertical = 0;
+}
 void startOdometry() {
     while(true) {
         odometry_enabled = true;
@@ -89,4 +100,3 @@ void startOdometry() {
     }
 
 }
-

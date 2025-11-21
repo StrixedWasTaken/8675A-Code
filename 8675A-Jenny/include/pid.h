@@ -1,74 +1,80 @@
+#ifndef PID_H
+#define PID_H
+
 #include "vex.h"
-#include "odom.h"
+#include <cmath> // for fabs
 
-#pragma once
-
-// Enum for swing direction
-enum class SwingSet {
-    LEFT_SWING,
-    RIGHT_SWING
-};
-
-// Enum for motion types
-enum class SettleType {
-    DEFAULT_WAIT = 400,
-    QUICK_WAIT = 25,
-    MOTION_CHAIN = 0
-};
-
-constexpr SettleType DEFAULT_WAIT = SettleType::DEFAULT_WAIT;
-constexpr SettleType QUICK_WAIT = SettleType::QUICK_WAIT;
-constexpr SettleType MOTION_CHAIN = SettleType::MOTION_CHAIN;
-
-constexpr SwingSet LEFT_SWING = SwingSet::LEFT_SWING;
-constexpr SwingSet RIGHT_SWING = SwingSet::RIGHT_SWING;
-
-// Function declarations without default for settleType
-extern void drive_set(double target, double mSpeed, SettleType motion = SettleType::DEFAULT_WAIT);
-
-extern void turn_set(double target, double mSpeed, SettleType motion = SettleType::DEFAULT_WAIT);
-
-extern void swing_set(SwingSet side, double target, double mSpeed, double arcSpeed = 0, SettleType motion = SettleType::DEFAULT_WAIT);
-
-extern void to_point(double xTarget, double yTarget, SettleType motion = SettleType::DEFAULT_WAIT);
-
-extern void turn_to(double xTarget, double yTarget, SettleType motion = SettleType::DEFAULT_WAIT);
-
-extern void to_pose(double xTarget, double yTarget, double angle, double dlead, SettleType motion = SettleType::DEFAULT_WAIT);
-
-extern double compute(double input); // PID Compute function
-
-// PID variables
-extern double error, derivative, integral, previous_error, starti, output;
-
-// PID constants for various motions
-extern double driveKP, driveKI, driveKD, turnKP, turnKI, turnKD, swingKP, swingKI, swingKD, lKP, lKI, lKD, aKP, aKI, aKD;
-
-extern double xError, yError, angularError, linearError, previousAngularError, linearOutput, angularOutput, leftPower, rightPower;
-
-extern double heading_max_volt, drive_max_volt, drive_settle_error, dlead, drive_min_volt, targetDistance, carrot_X, carrot_Y, scale_factor, setback;
-
-extern double linearIntegral, angularIntegral;
-
-// wraps intertial error so it finds the fastest way to turn to a point
-extern double wrap(double input);
-
-//Wraps heading between pi and -pi for radian heading
-extern double wrapRad(double input);
-
-// variable for the inertial heading
-extern double curr_heading;
-
-// PID settle check based on the settle type, without a default for SettleType
-extern bool pidSettled(SettleType st = SettleType::DEFAULT_WAIT); 
-
-// radians to degrees
-extern double toDeg(double input);
-
-//Clamp logic from C++ 17 just copied over since it doesn't exist in this version
-
-template<class T>
-const T& clamp(const T& v, const T& lo, const T& hi)
+class PID
 {
-    return (v < lo) ? lo : (hi < v) ? hi : v;
-}
+private:
+    double kp, ki, kd;
+    double previous_error;
+    double integral;
+    double starti;       // threshold to start integrating
+    double integral_max; // max absolute value of integral term
+
+    // Helper to get sign of a number
+    int sign(double val)
+    {
+        return (val > 0) - (val < 0);
+    }
+
+public:
+    double max_timeout;
+    double settle_error;
+
+    PID(double kp_, double ki_, double kd_)
+        : kp(kp_),
+          ki(ki_),
+          kd(kd_),
+          previous_error(0.0),
+          integral(0.0) {}
+
+    void reset()
+    {
+        previous_error = 0.0;
+        integral = 0.0;
+    }
+
+    double update(double error)
+    {
+        double derivative = error - previous_error;
+
+        // Integrate only if error magnitude is greater than starti (threshold)
+        if (fabs(error) <= starti)
+        {
+            integral += error;
+        }
+
+        if ((error > 0 && previous_error < 0) || (error < 0 && previous_error > 0))
+        {
+            integral = 0;
+        }
+        
+        previous_error = error;
+
+        return (error * kp) + (integral * ki) + (derivative * kd);
+    }
+
+    // Optional setters
+    void setGains(double kp_, double ki_, double kd_)
+    {
+        kp = kp_;
+        ki = ki_;
+        kd = kd_;
+    }
+
+    void setIntegralLimits(double starti_, double integral_max_)
+    {
+        starti = starti_;
+        integral_max = integral_max_;
+    }
+
+    void set_constants(double settle_error_, double max_timeout_)
+    {
+        settle_error = settle_error_;
+        max_timeout = max_timeout_;
+    }
+};
+
+#endif // PID_H

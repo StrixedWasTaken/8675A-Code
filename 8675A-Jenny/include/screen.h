@@ -4,7 +4,7 @@
 using namespace vex;
 
 std::string motornames[8] = {"l1", "l2", "l3", "r1", "r2", "r3", "left_in", "right_in"};
-std::string truciatedautos[7] = {"Null", "B7L", "R7L", "R3S3L", "B3T3L", "NA", "NA"};
+std::string truciatedautos[7] = {"Null", "BR4L3T", "BR4L3S", "N/A", "N/A", "NA", "NA"};
 int amount_calibrated = 1;
 
 int printinfo()
@@ -14,8 +14,8 @@ int printinfo()
 
         int LDT = ((l1.temperature(celsius) + l2.temperature(celsius) + l3.temperature(celsius)) / 3);
         int RDT = ((r1.temperature(celsius) + r2.temperature(celsius) + r3.temperature(celsius)) / 3);
-        int IT = (leftIntake.temperature(celsius));
-        int I2T = (rightIntake.temperature(celsius));
+        int IT = (topIntake.temperature(celsius));
+        int I2T = (middleIntake.temperature(celsius));
 
         int Braintime = (Brain.timer(sec));
         Controller1.Screen.setCursor(1, 1);
@@ -30,10 +30,6 @@ int printinfo()
         if (!imu.installed())
         {
             Controller1.Screen.print("Inertial");
-        }
-        if (!color_sensor.installed())
-        {
-            Controller1.Screen.print("No Color Sensor");
         }
 
         // if (!horizontal_wheel.installed())
