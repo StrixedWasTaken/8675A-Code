@@ -65,9 +65,9 @@ int odometry_loop()
          x += polarRadius * cos(globalPolarAngle);
          y += polarRadius * sin(globalPolarAngle);
 
-        Brain.Screen.printAt(10, 100, "X: %2f", x);
-        Brain.Screen.printAt(10, 110, "Y: %2f", y);
-
+        // Brain.Screen.printAt(10, 100, "X: %2f", x);
+        // Brain.Screen.printAt(10, 110, "Y: %2f", y);
+        // Brain.Screen.printAt(10, 120, "Heading: %2f", get_absolute_heading());
         previous_vertical = raw_vertical;
         previous_horizontal = raw_horizontal;
         previous_heading = heading;

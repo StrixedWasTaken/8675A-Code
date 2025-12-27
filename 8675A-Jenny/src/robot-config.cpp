@@ -20,20 +20,24 @@ motor r3 = motor(PORT6, ratio6_1, false);//
 motor_group Right = motor_group(r1, r2, r3);
 inertial imu = inertial(PORT18);
 
-motor frontIntake = motor(PORT5, ratio6_1, true);//
+motor frontIntake = motor(PORT5, ratio18_1, true);//
 motor middleIntake = motor(PORT19, ratio6_1, true);
-motor topIntake = motor(PORT13, ratio18_1, true);
-
-motor all_motors[8] = {l1, l2, l3, r1, r2, r3, frontIntake, middleIntake};
-
-rotation vertical_wheel = rotation(PORT11, true);
-rotation horizontal_wheel = rotation(PORT7);
+motor topIntake = motor(PORT13, ratio18_1, false);
 
 motor_group intake = motor_group(frontIntake, middleIntake, topIntake);
 
 digital_out dropdown = digital_out(Brain.ThreeWirePort.A);
 digital_out ball_stopper = digital_out(Brain.ThreeWirePort.B);
 digital_out height_changer = digital_out(Brain.ThreeWirePort.C);
+
+motor all_motors[9] = {l1, l2, l3, r1, r2, r3, frontIntake, middleIntake, topIntake};
+
+rotation vertical_wheel = rotation(PORT11, true);
+rotation horizontal_wheel = rotation(PORT7);
+
+motor_group intake = motor_group(frontIntake, middleIntake, topIntake);
+
+
 
 void vexcodeInit( void ) {
   // nothing to initialize

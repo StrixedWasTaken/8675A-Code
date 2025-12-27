@@ -18,15 +18,17 @@
 #include "v5_vcs.h"
 #include "robot-config.h"
 #include <iostream>
+#pragma once
 
 using namespace vex;
 using namespace std;
 
-// to in
+template<class T>
+const T& clamp(const T& v, const T& lo, const T& hi)
+{
+    return (v < lo) ? lo : (hi < v) ? hi : v;
+}
 
-// double toInch(double input, double wheel_diameter, double gear_ratio) {
-//   return (input / 360) * (gear_ratio * (M_PI * wheel_diameter));
-// }
 
 #define waitUntil(condition)                                                   \
   do {                                                                         \

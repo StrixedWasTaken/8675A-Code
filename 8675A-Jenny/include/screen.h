@@ -1,9 +1,10 @@
+#pragma once
 #include "vex.h"
-#include "autons.h"
+#include "visuals.h"
 
 using namespace vex;
 
-std::string motornames[8] = {"l1", "l2", "l3", "r1", "r2", "r3", "left_in", "right_in"};
+std::string motornames[9]= {"l1", "l2", "l3", "r1", "r2", "r3", "left_in", "right_in","top_in"};
 std::string truciatedautos[7] = {"Null", "BR4L3T", "BR4L3S", "N/A", "N/A", "NA", "NA"};
 int amount_calibrated = 1;
 
@@ -20,7 +21,7 @@ int printinfo()
         int Braintime = (Brain.timer(sec));
         Controller1.Screen.setCursor(1, 1);
 
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < 9; i++)
         {
             if ((all_motors[i].installed())==false)
             {

@@ -1,8 +1,7 @@
 #ifndef PID_H
 #define PID_H
-
 #include "vex.h"
-#include <cmath> // for fabs
+#pragma once
 
 class PID
 {
@@ -20,6 +19,9 @@ private:
     }
 
 public:
+ double P_Result;
+    double I_Result;
+    double D_Result;
     double max_timeout;
     double settle_error;
 
@@ -53,7 +55,11 @@ public:
         
         previous_error = error;
 
-        return (error * kp) + (integral * ki) + (derivative * kd);
+        P_Result=error * kp;
+        I_Result=integral * ki;
+        D_Result=derivative * kd;
+        return P_Result + I_Result + D_Result;
+        
     }
 
     // Optional setters

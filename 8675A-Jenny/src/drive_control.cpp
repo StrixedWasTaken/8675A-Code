@@ -9,7 +9,6 @@ double derivative;
 double integral;
 double error;
 double previous_error;
-double starti = 10;
 double output;
 
 // Odometry Variables
@@ -27,15 +26,14 @@ double carrot_X;
 double carrot_Y;
 double setback = 1;
 double targetAngle;
-
-int timeout;
-
-double wheel_inches = 2.75 * M_PI / 360;
+int timeout = 0;
+double settled_time = 0;
+double start_time = 0;
+double previous_output;
 
 bool pidSettled(SettleType motion, int time_settled, int timeout, int max_timeout)
 {
-  const int DEFAULT_SETTLE_TIME = 25;
-  const int QUICK_SETTLE_TIME = 10;
+  const int DEFAULT_SETTLE_TIME = 125;
   const int CHAIN_SETTLE_TIME = 0;
 
   if (timeout >= max_timeout)
@@ -45,8 +43,6 @@ bool pidSettled(SettleType motion, int time_settled, int timeout, int max_timeou
   {
   case SettleType::DEFAULT_WAIT:
     return time_settled > DEFAULT_SETTLE_TIME;
-  case SettleType::QUICK_WAIT:
-    return time_settled > QUICK_SETTLE_TIME;
   case SettleType::MOTION_CHAIN:
     return time_settled > CHAIN_SETTLE_TIME;
   default:
@@ -54,6 +50,7 @@ bool pidSettled(SettleType motion, int time_settled, int timeout, int max_timeou
   }
 }
 
+double slew_rateD = 10;
 // PID Drives
 void drive_set(double target, double mSpeed, SettleType motion)
 {
@@ -63,12 +60,15 @@ void drive_set(double target, double mSpeed, SettleType motion)
   error = 0;
   integral = 0;
   derivative = 0;
+  previous_output = 0;
   l2.resetPosition();
   r2.resetPosition();
-
   PID drivePID(driveKP, driveKI, driveKD);
-  drivePID.setIntegralLimits(10, 1000);
-  drivePID.set_constants(2.5, 100);
+  drivePID.setIntegralLimits(8, 3000);
+  drivePID.set_constants(2.5, 3000);
+
+  start_time = Brain.timer(msec);
+  settled_time = Brain.timer(msec);
 
   while (!pidSettled(motion, time_settled, timeout, drivePID.max_timeout))
   {
@@ -79,7 +79,10 @@ void drive_set(double target, double mSpeed, SettleType motion)
 
     output = drivePID.update(error);
 
+    output = slew(output, previous_output, slew_rateD);
     output = clamp(output, -mSpeed, mSpeed); // limits speed based off max speed
+    
+    timeout = Brain.timer(msec) - start_time;
 
     Left.spin(fwd, output, volt);
     Right.spin(fwd, output, volt);
@@ -88,40 +91,37 @@ void drive_set(double target, double mSpeed, SettleType motion)
     std::cout << "error: " << error << endl;
 
     previous_error = error;
-
-    timeout++;
-
-    if (fabs(error) < drivePID.settle_error && (motion == SettleType::DEFAULT_WAIT || // if error is less than 1 for regular waits and quick waits, then it exits
-                                                motion == SettleType::QUICK_WAIT))
+    previous_output;
+    if (fabs(error) < drivePID.settle_error && (motion == SettleType::DEFAULT_WAIT))
     {
-      time_settled++;
-      // cout << "settle: " << time_settled << endl;
+      time_settled = Brain.timer(msec) - settled_time;
     }
     else if (fabs(error) < 5.0 && (motion == SettleType::MOTION_CHAIN))
     { // if error is less than 5 (larger threshold than regular) so it can exit quicker to chain the motions
-      time_settled++;
+      time_settled = Brain.timer(msec) - settled_time;
     }
     else
     {
+      settled_time = Brain.timer(msec);
       time_settled = 0;
     }
 
     wait(10, msec);
   }
 
-  if (motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT)
+  if (motion == SettleType::DEFAULT_WAIT)
   {
     Left.stop(brake);
     Right.stop(brake);
-        std::cout << "\033[32msettled\033[0m" << std::endl;
+    std::cout << "\033[32msettled\033[0m" << std::endl;
   }
   else if (motion == SettleType::MOTION_CHAIN)
   {
-    // doesnt stop at all
-        std::cout << "\033[32msettled\033[0m" << std::endl;
+    //
   }
 }
 
+double slew_rateT = 9;
 // PID Swings
 void turn_set(double target, double mSpeed, SettleType motion)
 {
@@ -132,18 +132,23 @@ void turn_set(double target, double mSpeed, SettleType motion)
   integral = 0;
   derivative = 0;
   PID turnPID(turnKP, turnKI, turnKD);
-  turnPID.setIntegralLimits(6, 1000);
-  turnPID.set_constants(2, 200);
+  turnPID.setIntegralLimits(6, 3000);
+  turnPID.set_constants(1.5, 2000);
+
+  settled_time = Brain.timer(msec);
+  start_time = Brain.timer(msec);
 
   while (!pidSettled(motion, time_settled, timeout, turnPID.max_timeout))
   {
 
-    error = reduce_negative_180_to_180(target - get_absolute_heading());
+    error = normalizeTarget(target - imu.rotation(deg));
 
     output = turnPID.update(error);
 
+    output = slew(output, previous_output, slew_rateT);
     output = clamp(output, -mSpeed, mSpeed);
 
+    
     Brain.Screen.printAt(10, 40, "Turn Error: %2f", error);
     cout << "turn error: " << error << endl;
     Left.spin(fwd, output, volt);
@@ -151,164 +156,177 @@ void turn_set(double target, double mSpeed, SettleType motion)
 
     timeout++;
 
-    if ((motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT) && fabs(error) < turnPID.settle_error)
+    if ((motion == SettleType::DEFAULT_WAIT) && fabs(error) < turnPID.settle_error)
     {
-      time_settled++;
+      time_settled = Brain.timer(msec) - settled_time;
     }
     else if (motion == SettleType::MOTION_CHAIN && fabs(error) < 5.0)
     {
-      time_settled++;
+      time_settled = Brain.timer(msec) - settled_time;
     }
     else
     {
-      time_settled = 0; // Reset if error jumps again
+      settled_time = Brain.timer(msec);
+      time_settled = 0;
     }
 
     wait(10, msec);
   }
 
-  if (motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT)
+  if (motion == SettleType::DEFAULT_WAIT)
   {
     Left.stop(brake);
     Right.stop(brake);
-        std::cout << "\033[32msettled\033[0m" << std::endl;
+    std::cout << "\033[32msettled\033[0m" << std::endl;
   }
   else if (motion == SettleType::MOTION_CHAIN)
   {
     // doesnt stop at all
-        std::cout << "\033[32msettled\033[0m" << std::endl;
+    std::cout << "\033[32msettled\033[0m" << std::endl;
   }
 }
 
-// void to_pose(double xTarget, double yTarget, double angle, double dlead, double dir, SettleType motion)
-// {
+void to_pose(double xTarget, double yTarget, double angle, double dlead, double dir, SettleType motion)
+{
 
-//   time_settled = 0;
-//   timeout = 0;
-//   linearError = 0;
-//   angularError = 0;
-//   integral = 0;
-//   derivative = 0;
-//   int add = dir > 0 ? 0 : 180;
-//   targetDistance = 0;
-//   carrot_X = 0;
-//   carrot_Y = 0;
-//   setback = 1;
+  time_settled = 0;
+  timeout = 0;
+  linearError = 0;
+  angularError = 0;
+  integral = 0;
+  derivative = 0;
+  int add = dir > 0 ? 0 : 180;
+  targetDistance = 0;
+  carrot_X = 0;
+  carrot_Y = 0;
+  setback = 1;
 
-//   PID linearPID(lKP, lKI, lKD);
-//   PID angularPID(aKP, aKI, aKD);
-//   linearPID.setIntegralLimits(5, 1000);
-//   angularPID.setIntegralLimits(3, 1000);
-//   linearPID.set_constants(2.0, 400);
-//   angularPID.set_constants(2.0, 400);
+  PID linearPID(lKP, lKI, lKD);
+  PID angularPID(aKP, aKI, aKD);
+  linearPID.setIntegralLimits(5, 1000);
+  angularPID.setIntegralLimits(3, 1000);
+  linearPID.set_constants(3.0, 4000);
+  angularPID.set_constants(3.0, 4000);
 
-//   float start_angle_deg = toDeg(atan2(xTarget - x, yTarget - y));
-//   bool line_settled = false;
-//   bool prev_line_settled = is_line_settled(xTarget, yTarget, start_angle_deg, x, y);
+  float start_angle_deg = toDeg(atan2(xTarget - x, yTarget - y));
+  bool line_settled = false;
+  bool prev_line_settled = is_line_settled(xTarget, yTarget, start_angle_deg, x, y);
 
-//   bool center_line_side = is_line_settled(xTarget, yTarget, start_angle_deg, x, y);
-//   bool crossed_center_line = false;
-//   bool prev_center_line_side = center_line_side;
+  bool center_line_side = is_line_settled(xTarget, yTarget, start_angle_deg, x, y);
+  bool crossed_center_line = false;
+  bool prev_center_line_side = center_line_side;
 
-//   while (!pidSettled(motion, time_settled, timeout, linearPID.max_timeout))
-//   {
+  settled_time = Brain.timer(msec);
+  start_time = Brain.timer(msec);
 
-//     line_settled = is_line_settled(xTarget, yTarget, start_angle_deg, x, y);
-//     if (line_settled && !prev_line_settled)
-//     {
-//       time_settled = 100;
-//     }
-//     prev_line_settled = line_settled;
+  while (!pidSettled(motion, time_settled, timeout, linearPID.max_timeout))
+  {
 
-//     // center_line_side = is_line_settled(xTarget, yTarget, angle + 90, x, y);
-//     // if (center_line_side != prev_center_line_side)
-//     // {
-//     //   crossed_center_line = true;
-//     // }
+    line_settled = is_line_settled(xTarget, yTarget, start_angle_deg, x, y);
+    if (line_settled && !prev_line_settled)
+    {
+      time_settled = 100;
+    }
+    prev_line_settled = line_settled;
 
-//     xError = xTarget - x;
-//     yError = yTarget - y;
+    // center_line_side = is_line_settled(xTarget, yTarget, angle + 90, x, y);
+    // if (center_line_side != prev_center_line_side)
+    // {
+    //   crossed_center_line = true;
+    // }
 
-//     targetDistance = hypot(xError, yError) * dir;
+    xError = xTarget - x;
+    yError = yTarget - y;
 
-//     carrot_X = xTarget - targetDistance * sin(toRad(angle + add)) * dlead;
-//     carrot_Y = yTarget - targetDistance * cos(toRad(angle + add)) * dlead;
+    targetDistance = hypot(xError, yError) * dir;
 
-//     angularError = reduce_negative_180_to_180(toDeg(atan2(carrot_X - x, carrot_Y - y)) - get_absolute_heading());
+    carrot_X = xTarget - targetDistance * sin(toRad(angle + add)) * dlead;
+    carrot_Y = yTarget - targetDistance * cos(toRad(angle + add)) * dlead;
 
-//     linearError = hypot(carrot_X - x, carrot_Y - y);
+    angularError = reduce_negative_180_to_180(toDeg(atan2(carrot_X - x, carrot_Y - y)) - get_absolute_heading());
 
-//     if (linearError > 8)
-//     {
+    linearError = hypot(carrot_X - x, carrot_Y - y);
 
-//       angularError = reduce_negative_180_to_180(toDeg(atan2(carrot_X - x, carrot_Y - y)) - get_absolute_heading());
-//     }
-//     else if (targetDistance > 6)
-//     {
-//       angularError = (toDeg(atan2(xError, yError)) + add);
-//     }
+    if (linearError > 8)
+    {
 
-//     angularError = sin(toRad(angularError)) * linearError;
+      angularError = reduce_negative_180_to_180(toDeg(atan2(carrot_X - x, carrot_Y - y)) - get_absolute_heading());
+    }
+    else if (fabs(targetDistance) > 6)
+    {
+      angularError = reduce_negative_180_to_180(toDeg(atan2(xError, yError)) - get_absolute_heading() + add);
+    }
+    else
+    {
+      angularError = reduce_negative_180_to_180(angle - get_absolute_heading());
+    }
 
-//     linearOutput = linearPID.update(linearError);
+    angularError = sin(toRad(angularError)) * linearError;
 
-//     scale_factor = cos(toRad(angularError));
+    linearOutput = linearPID.update(linearError);
 
-//     linearOutput *= scale_factor;
+    scale_factor = cos(toRad(angularError));
 
-//     angularError = reduce_negative_90_to_90(angularError);
+    linearOutput *= scale_factor;
 
-//     angularOutput = angularPID.update(angularError);
+    angularError = reduce_negative_90_to_90(angularError);
 
-//     if (linearError < linearPID.settle_error)
-//     {
-//       angularOutput = 0;
-//     }
+    angularOutput = angularPID.update(angularError);
 
-//     linearOutput = clamp(linearOutput, -fabs(scale_factor) * drive_max_volt, fabs(scale_factor) * drive_max_volt);
-//     angularOutput = clamp(angularOutput, -heading_max_volt, heading_max_volt);
+    if (linearError < linearPID.settle_error)
+    {
+      angularOutput = 0;
+    }
 
-//     linearOutput = clamp_min_voltage(linearOutput, drive_min_volt);
+    linearOutput = clamp(linearOutput, -fabs(scale_factor) * drive_max_volt, fabs(scale_factor) * drive_max_volt);
+    angularOutput = clamp(angularOutput, -heading_max_volt, heading_max_volt);
 
-//     cout << "linear error: " << linearError << endl;
-//     cout << "angular error: " << angularError << endl;
+    linearOutput = clamp_min_voltage(linearOutput, drive_min_volt);
 
-//     Brain.Screen.printAt(10, 100, "Linear Error: %2f", linearError);
-//     Brain.Screen.printAt(10, 110, "Angular Error: %2f", angularError);
-//     Brain.Screen.printAt(10, 120, "Left Power: %2f", leftPower);
-//     Brain.Screen.printAt(10, 130, "Right Power: %2f", rightPower);
+    cout << "linear error: " << linearError << endl;
+    cout << "angular error: " << angularError << endl;
 
-//     Left.spin(fwd, left_voltage_scaling(linearOutput, angularOutput), volt);
-//     Right.spin(fwd, right_voltage_scaling(linearOutput, angularOutput), volt);
+    Brain.Screen.printAt(10, 100, "Linear Error: %2f", linearError);
+    Brain.Screen.printAt(10, 110, "Angular Error: %2f", angularError);
+    Brain.Screen.printAt(10, 120, "Left Power: %2f", leftPower);
+    Brain.Screen.printAt(10, 130, "Right Power: %2f", rightPower);
 
-//     // timeout++;
+    timeout = Brain.timer(msec) - start_time;
 
-//     if ((motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT) && fabs(linearError) < linearPID.settle_error && fabs(angularError) < angularPID.settle_error)
-//     {
-//       time_settled++;
-//     }
-//     else if (motion == SettleType::MOTION_CHAIN && fabs(linearError) < 5.0)
-//     {
-//       time_settled++;
-//     }
-//     else
-//     {
-//       time_settled = 0; // Reset if error jumps again
-//     }
+    Left.spin(fwd, left_voltage_scaling(linearOutput, angularOutput), volt);
+    Right.spin(fwd, right_voltage_scaling(linearOutput, angularOutput), volt);
 
-//     wait(10, msec);
-//   }
-//   if (motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT)
-//   {
-//     Left.stop(brake);
-//     Right.stop(brake);
-//   }
-//   else if (motion == SettleType::MOTION_CHAIN)
-//   {
-//     // doesnt stop at all
-//   }
-// }
+    // timeout++;
 
+    if ((motion == SettleType::DEFAULT_WAIT) && fabs(linearError) < linearPID.settle_error && fabs(angularError) < angularPID.settle_error)
+    {
+      time_settled = Brain.timer(msec) - settled_time;
+    }
+    else if (motion == SettleType::MOTION_CHAIN && fabs(linearError) < 5.0)
+    {
+      time_settled = Brain.timer(msec) - settled_time;
+    }
+    else
+    {
+      time_settled = 0; // Reset if error jumps again
+      settled_time = Brain.timer(msec);
+    }
+
+    wait(10, msec);
+  }
+  if (motion == SettleType::DEFAULT_WAIT)
+  {
+    Left.stop(brake);
+    Right.stop(brake);
+  }
+  else if (motion == SettleType::MOTION_CHAIN)
+  {
+    // doesnt stop at all
+  }
+}
+
+double prevLinear;
+double prevAngular;
 void to_point(double xTarget, double yTarget, int dir, SettleType motion)
 {
 
@@ -323,14 +341,17 @@ void to_point(double xTarget, double yTarget, int dir, SettleType motion)
   int add = dir > 0 ? 0 : 180;
   PID linearPID(lKP, lKI, lKD);
   PID angularPID(aKP, aKI, aKD);
-  linearPID.setIntegralLimits(5, 1000);
-  angularPID.setIntegralLimits(3, 1000);
-  linearPID.set_constants(2, 125);
-  angularPID.set_constants(2, 125);
+  linearPID.setIntegralLimits(5, 3000);
+  angularPID.setIntegralLimits(3, 3000);
+  linearPID.set_constants(3, 4000);
+  angularPID.set_constants(3, 4000);
 
   float start_angle_deg = toDeg(atan2(xTarget - x, yTarget - y));
   bool line_settled = false;
   bool prev_line_settled = is_line_settled(xTarget, yTarget, start_angle_deg, x, y);
+
+  start_time = Brain.timer(msec);
+  settled_time = Brain.timer(msec);
 
   while (!pidSettled(motion, time_settled, timeout, linearPID.max_timeout))
   {
@@ -351,7 +372,7 @@ void to_point(double xTarget, double yTarget, int dir, SettleType motion)
     angularError = sin(toRad(angularError)) * linearError;
 
     linearOutput = linearPID.update(linearError);
-
+    
     scale_factor = cos(toRad(angularError));
 
     linearOutput *= scale_factor;
@@ -386,7 +407,7 @@ void to_point(double xTarget, double yTarget, int dir, SettleType motion)
 
     leftPower = left_voltage_scaling(linearOutput, angularOutput);
     rightPower = right_voltage_scaling(linearOutput, angularOutput);
-
+    
     if (dir == -1)
     {
       swap(leftPower, rightPower);
@@ -399,26 +420,27 @@ void to_point(double xTarget, double yTarget, int dir, SettleType motion)
     Brain.Screen.printAt(10, 120, "Left Power: %2f", leftPower);
     Brain.Screen.printAt(10, 130, "Right Power: %2f", rightPower);
 
+    timeout = Brain.timer(msec) - start_time;
     Left.spin(fwd, leftPower, volt);
     Right.spin(fwd, rightPower, volt);
-    timeout++;
 
-    if ((motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT) && fabs(linearError) < linearPID.settle_error && fabs(angularError) < angularPID.settle_error)
+    if ((motion == SettleType::DEFAULT_WAIT) && fabs(linearError) < linearPID.settle_error && fabs(angularError) < angularPID.settle_error)
     {
-      time_settled++;
-    } 
+      time_settled = Brain.timer(msec) - settled_time;
+    }
     else if (motion == SettleType::MOTION_CHAIN && fabs(linearError) < 5.0)
     {
-      time_settled++;
-    } 
+      time_settled = Brain.timer(msec) - settled_time;
+    }
     else
     {
       time_settled = 0; // Reset if error jumps again
+      settled_time = Brain.timer(msec);
     }
 
     wait(10, msec);
   }
-  if (motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT)
+  if (motion == SettleType::DEFAULT_WAIT)
   {
     Left.stop(brake);
     Right.stop(brake);
@@ -430,7 +452,7 @@ void to_point(double xTarget, double yTarget, int dir, SettleType motion)
 }
 
 // PID Swings
-void left_swing(double target, double mSpeed, double arcSpeed, SettleType motion)
+void left_swing(double target, double mSpeed, SettleType motion)
 {
 
   time_settled = 0;
@@ -440,8 +462,11 @@ void left_swing(double target, double mSpeed, double arcSpeed, SettleType motion
   derivative = 0;
 
   PID leftSwingPID(swingKP, swingKI, swingKD);
-  leftSwingPID.setIntegralLimits(3, 1000);
+  leftSwingPID.setIntegralLimits(5, 1000);
   leftSwingPID.set_constants(1, 400);
+
+  settled_time = Brain.timer(msec);
+  start_time = Brain.timer(msec);
 
   while (!pidSettled(motion, time_settled, timeout, leftSwingPID.max_timeout))
   {
@@ -453,32 +478,26 @@ void left_swing(double target, double mSpeed, double arcSpeed, SettleType motion
     output = clamp(output, -mSpeed, mSpeed);
     cout << "error: " << error << endl;
 
+    timeout = Brain.timer(msec) - start_time;
     Left.spin(fwd, output, volt);
 
-    if (arcSpeed > 0)
-    {
-      Right.spin(fwd, arcSpeed, volt);
-    }
-    else
-    {
-      Right.stop(hold);
-    }
 
-    if ((motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT) && fabs(error) < leftSwingPID.settle_error)
+    if ((motion == SettleType::DEFAULT_WAIT) && fabs(error) < leftSwingPID.settle_error)
     {
-      time_settled++;
+      time_settled = Brain.timer(msec) - settled_time;
     }
     else if (motion == SettleType::MOTION_CHAIN && fabs(error) < 5.0)
     {
-      time_settled++;
+      time_settled = Brain.timer(msec) - settled_time;
     }
     else
     {
       time_settled = 0; // Reset if error jumps again
+      settled_time = Brain.timer(msec);
     }
     wait(10, msec);
   }
-  if (motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT)
+  if (motion == SettleType::DEFAULT_WAIT)
   {
     Left.stop(brake);
     Right.stop(brake);
@@ -502,6 +521,9 @@ void right_swing(double target, double mSpeed, double arcSpeed, SettleType motio
   rightSwingPID.setIntegralLimits(3, 1000);
   rightSwingPID.set_constants(1, 400);
 
+  settled_time = Brain.timer(msec);
+  start_time = Brain.timer(msec);
+
   while (!pidSettled(motion, time_settled, timeout, rightSwingPID.max_timeout))
   {
 
@@ -514,30 +536,22 @@ void right_swing(double target, double mSpeed, double arcSpeed, SettleType motio
 
     Right.spin(fwd, output, volt);
 
-    if (arcSpeed > 0)
+    if ((motion == SettleType::DEFAULT_WAIT) && fabs(error) < rightSwingPID.settle_error)
     {
-      Left.spin(fwd, arcSpeed, volt);
-    }
-    else
-    {
-      Left.stop(hold);
-    }
-
-    if ((motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT) && fabs(error) < rightSwingPID.settle_error)
-    {
-      time_settled++;
+      time_settled = Brain.timer(msec) - settled_time;
     }
     else if (motion == SettleType::MOTION_CHAIN && fabs(error) < 5.0)
     {
-      time_settled++;
+      time_settled = Brain.timer(msec) - settled_time;
     }
     else
     {
       time_settled = 0; // Reset if error jumps again
+      settled_time = Brain.timer(msec);
     }
     wait(10, msec);
   }
-  if (motion == SettleType::DEFAULT_WAIT || motion == SettleType::QUICK_WAIT)
+  if (motion == SettleType::DEFAULT_WAIT)
   {
     Left.stop(brake);
     Right.stop(brake);

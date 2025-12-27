@@ -1,4 +1,5 @@
 #include "vex.h"
+#pragma once
 
 extern double to_inch(double input);
 

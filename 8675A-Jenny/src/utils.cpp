@@ -111,7 +111,44 @@ bool is_line_settled(float desired_X, float desired_Y, float desired_angle_deg, 
     return ((desired_Y - current_Y) * cos(toRad(desired_angle_deg)) <= -(desired_X - current_X) * sin(toRad(desired_angle_deg)));
 }
 
-void drive_with_volt(double l, double r) {
+void drive_with_volt(double l, double r)
+{
     Left.spin(fwd, l, volt);
     Right.spin(fwd, r, volt);
+}
+
+int signum(double x)
+{
+    return (x > 0) - (x < 0);
+}
+
+double slew(double target_output, double prev_output, double slew)
+{
+    double diff = target_output - prev_output;
+    if (fabs(diff) > slew)
+    {
+        return prev_output + signum(diff) * slew;
+    }
+    else
+    {
+        return target_output;
+    }
+}
+double getInertialHeading() {
+    return imu.rotation(deg);
+}
+double normalizeTarget(double angle) {
+  // Adjust angle to be within +/-180 degrees of the inertial sensor's rotation
+  if (angle > 180) {
+    while (angle > 180) angle -= 360;
+  } else if (angle < -180) {
+    while (angle < -180) angle += 360;
+  }
+  return angle;
+}
+
+double driveChassis(double leftDrive, double rightDrive) {
+    Left.spin(fwd, leftDrive, volt);
+    Right.spin(fwd, rightDrive, volt);
+    return 1;
 }

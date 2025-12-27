@@ -1,8 +1,8 @@
-#include "vex.h"
+#pragma once
 #include "odom.h"
 #include "utils.h"
+#include "pid.h"
 
-#pragma once
 
 // Enum for swing direction
 enum class SwingSet {
@@ -13,12 +13,10 @@ enum class SwingSet {
 // Enum for motion types
 enum class SettleType {
     DEFAULT_WAIT = 15,
-    QUICK_WAIT = 10,
     MOTION_CHAIN = 0
 };
 
 constexpr SettleType DEFAULT_WAIT = SettleType::DEFAULT_WAIT;
-constexpr SettleType QUICK_WAIT = SettleType::QUICK_WAIT;
 constexpr SettleType MOTION_CHAIN = SettleType::MOTION_CHAIN;
 
 constexpr SwingSet LEFT_SWING = SwingSet::LEFT_SWING;
@@ -46,7 +44,7 @@ extern bool pidSettled(SettleType motion, int time_settled, int timeout, int max
 // PID constants for various motions
 extern double driveKP, driveKI, driveKD, turnKP, turnKI, turnKD, swingKP, swingKI, swingKD, lKP, lKI, lKD, aKP, aKI, aKD;
 
-extern double xError, yError, angularError, linearError, linearOutput, angularOutput, leftPower, rightPower;
+extern double xError, yError, angularError, linearError, linearOutput, angularOutput, leftPower, rightPower, previous_output;
 
 extern double targetAngle;
 
@@ -64,10 +62,10 @@ extern bool pidSettled(SettleType st = SettleType::DEFAULT_WAIT);
 // radians to degrees
 extern double toDeg(double input);
 
+extern double start_time;
+extern double settled_time;
+
+const double wheel_inches = 2.75 * M_PI / 360;
+
 //Clamp logic from C++ 17 just copied over since it doesn't exist in this version
 
-template<class T>
-const T& clamp(const T& v, const T& lo, const T& hi)
-{
-    return (v < lo) ? lo : (hi < v) ? hi : v;
-}
